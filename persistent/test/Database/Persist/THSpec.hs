@@ -51,6 +51,7 @@ import TemplateTestImports
 
 import qualified Database.Persist.TH.CommentSpec as CommentSpec
 import qualified Database.Persist.TH.CompositeKeyStyleSpec as CompositeKeyStyleSpec
+import qualified Database.Persist.TH.DefaultSpec as DefaultSpec
 import qualified Database.Persist.TH.DiscoverEntitiesSpec as DiscoverEntitiesSpec
 import qualified Database.Persist.TH.EmbedSpec as EmbedSpec
 import qualified Database.Persist.TH.EntityHaddockSpec as EntityHaddockSpec
@@ -201,6 +202,7 @@ spec = describe "THSpec" $ do
     MaybeFieldDefsSpec.spec
     TypeLitFieldDefsSpec.spec
     MigrationOnlySpec.spec
+    DefaultSpec.spec
     NoFieldSelectorsSpec.spec
     EmbedSpec.spec
     DiscoverEntitiesSpec.spec
