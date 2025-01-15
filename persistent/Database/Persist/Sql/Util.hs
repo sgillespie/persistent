@@ -17,13 +17,16 @@ module Database.Persist.Sql.Util
     , commaSeparated
     , parenWrapped
     , mkInsertValues
+    , redactValues
     , mkInsertPlaceholders
+    , redactPlaceholders
     , parseExistsResult
     ) where
 
 import Data.ByteString.Char8 (readInteger)
 import Data.Int (Int64)
 import Data.List.NonEmpty (NonEmpty(..))
+import Data.List (find)
 import qualified Data.Maybe as Maybe
 import Data.Text (Text, pack)
 import qualified Data.Text as T
@@ -50,9 +53,11 @@ import Database.Persist
        , keyFromValues
        , persistFieldDef
        , toPersistValue
+       , FieldAttr(..)
        )
 
 import Database.Persist.SqlBackend.Internal (SqlBackend(..))
+import Data.Functor (($>))
 
 keyAndEntityColumnNames :: EntityDef -> SqlBackend -> NonEmpty Text
 keyAndEntityColumnNames ent conn =
@@ -254,6 +259,34 @@ mkInsertValues entity =
         Just _ ->
             Nothing
 
+redactValues :: EntityDef -> [PersistValue] -> [PersistValue]
+redactValues entity vals =
+    Maybe.catMaybes (zipWith redactCols fields vals)
+  where
+    fields =
+      Maybe.mapMaybe
+        redactGeneratedCols
+        (getEntityFields entity)
+
+redactCols :: FieldDef -> PersistValue -> Maybe PersistValue
+redactCols field val = redactGeneratedCols field >> redactDefaultCols field val
+
+redactDefaultCols :: FieldDef -> PersistValue -> Maybe PersistValue
+redactDefaultCols field val = case find isDefaultAttr (fieldAttrs field) of
+    Just _
+        | val == PersistNull -> Nothing
+        | otherwise -> Just val
+    Nothing -> Just val
+
+redactGeneratedCols :: FieldDef -> Maybe FieldDef
+redactGeneratedCols field = case fieldGenerated field of
+    Nothing -> Just field
+    Just _ -> Nothing
+
+isDefaultAttr :: FieldAttr -> Bool
+isDefaultAttr (FieldAttrDefault _) = True
+isDefaultAttr _ = False
+
 -- | Returns a list of escaped field names and @"?"@ placeholder values for
 -- performing inserts. This does not include generated columns.
 --
@@ -273,6 +306,17 @@ mkInsertPlaceholders ed escape =
             Just (escape (fieldDB fd), "?")
         Just _ ->
             Nothing
+
+redactPlaceholders :: EntityDef -> [PersistValue] -> [(Text, Text)] -> [(Text, Text)]
+redactPlaceholders entity vals cols =
+    Maybe.catMaybes (zipWith3 redactCols' fields vals cols)
+  where
+    fields =
+      Maybe.mapMaybe
+        redactGeneratedCols
+        (getEntityFields entity)
+
+    redactCols' field val col = redactCols field val $> col
 
 parseExistsResult :: Maybe [PersistValue] -> Text -> String -> Bool
 parseExistsResult mm sql errloc =

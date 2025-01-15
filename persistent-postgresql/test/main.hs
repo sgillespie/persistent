@@ -29,6 +29,7 @@ import qualified CustomConstraintTest
 import qualified CustomPersistFieldTest
 import qualified CustomPrimaryKeyReferenceTest
 import qualified DataTypeTest
+import qualified DefaultColumnTest
 import qualified EmbedOrderTest
 import qualified EmbedTest
 import qualified EmptyEntityTest
@@ -215,3 +216,4 @@ main = do
       PgIntervalTest.specs
       ArrayAggTest.specs
       GeneratedColumnTestSQL.specsWith runConnAssert
+      DefaultColumnTest.specsWith runConnAssert

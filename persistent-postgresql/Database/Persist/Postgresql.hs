@@ -495,7 +495,9 @@ insertSql' ent vals =
         EntityIdField field ->
             ISRSingle (sql <> " RETURNING " <> escapeF (fieldDB field))
   where
-    (fieldNames, placeholders) = unzip (Util.mkInsertPlaceholders ent escapeF)
+    vals' = Util.redactValues ent vals
+    cols = Util.mkInsertPlaceholders ent escapeF
+    (fieldNames, placeholders) = unzip (Util.redactPlaceholders ent vals' cols)
     sql = T.concat
         [ "INSERT INTO "
         , escapeE $ getEntityDBName ent
@@ -2065,4 +2067,3 @@ instance (PersistUniqueWrite b) => PersistUniqueWrite (RawPostgresql b) where
     upsertBy uniq rec = withReaderT persistentBackend . upsertBy uniq rec
     putMany = withReaderT persistentBackend . putMany
 #endif
-

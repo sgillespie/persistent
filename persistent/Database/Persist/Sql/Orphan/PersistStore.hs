@@ -51,7 +51,7 @@ import Database.Persist.Sql.Util
        , mkInsertValues
        , mkUpdateText
        , parseEntityValues
-       , updatePersistValue
+       , updatePersistValue, redactValues
        )
 
 withRawQuery :: MonadIO m
@@ -162,8 +162,9 @@ instance PersistStoreWrite SqlBackend where
 
     insert_ val = do
         conn <- ask
-        let vals = mkInsertValues val
-        case connInsertSql conn (entityDef (Just val)) vals  of
+        let def = entityDef (Just val)
+            vals = redactValues def (mkInsertValues val)
+        case connInsertSql conn def vals  of
             ISRSingle sql -> do
                 withRawQuery sql vals $ do
                     pure ()
@@ -229,7 +230,7 @@ instance PersistStoreWrite SqlBackend where
         tshow = T.pack . show
         throw = liftIO . throwIO . userError . T.unpack
         t = entityDef $ Just val
-        vals = mkInsertValues val
+        vals = redactValues t (mkInsertValues val)
 
     insertMany [] = return []
     insertMany vals = do
