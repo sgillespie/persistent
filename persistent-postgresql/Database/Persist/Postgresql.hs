@@ -495,9 +495,8 @@ insertSql' ent vals =
         EntityIdField field ->
             ISRSingle (sql <> " RETURNING " <> escapeF (fieldDB field))
   where
-    vals' = Util.redactValues ent vals
     cols = Util.mkInsertPlaceholders ent escapeF
-    (fieldNames, placeholders) = unzip (Util.redactPlaceholders ent vals' cols)
+    (fieldNames, placeholders) = unzip (Util.redactPlaceholders ent vals cols)
     sql = T.concat
         [ "INSERT INTO "
         , escapeE $ getEntityDBName ent

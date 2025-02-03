@@ -163,22 +163,23 @@ instance PersistStoreWrite SqlBackend where
     insert_ val = do
         conn <- ask
         let def = entityDef (Just val)
-            vals = redactValues def (mkInsertValues val)
-        case connInsertSql conn def vals  of
+            vals = mkInsertValues val
+            valsRedacted = redactValues def vals
+        case connInsertSql conn def vals of
             ISRSingle sql -> do
-                withRawQuery sql vals $ do
+                withRawQuery sql valsRedacted $ do
                     pure ()
             ISRInsertGet sql1 _sql2 -> do
-                rawExecute sql1 vals
+                rawExecute sql1 valsRedacted
             ISRManyKeys sql _fs -> do
-                rawExecute sql vals
+                rawExecute sql valsRedacted
 
     insert val = do
         conn <- ask
         let esql = connInsertSql conn t vals
         key <-
             case esql of
-                ISRSingle sql -> withRawQuery sql vals $ do
+                ISRSingle sql -> withRawQuery sql valsRedacted $ do
                     x <- CL.head
                     case x of
                         Just [PersistInt64 i] -> case keyFromValues [PersistInt64 i] of
@@ -190,7 +191,7 @@ instance PersistStoreWrite SqlBackend where
                             Right k -> return k
 
                 ISRInsertGet sql1 sql2 -> do
-                    rawExecute sql1 vals
+                    rawExecute sql1 valsRedacted
                     withRawQuery sql2 [] $ do
                         mm <- CL.head
                         let m = maybe
@@ -213,7 +214,7 @@ instance PersistStoreWrite SqlBackend where
                             Right k -> return k
                             Left err -> throw $ "ISRInsertGet: keyFromValues failed: " `mappend` err
                 ISRManyKeys sql fs -> do
-                    rawExecute sql vals
+                    rawExecute sql valsRedacted
                     case entityPrimary t of
                        Nothing ->
                            error $ "ISRManyKeys is used when Primary is defined " ++ show sql
@@ -230,7 +231,8 @@ instance PersistStoreWrite SqlBackend where
         tshow = T.pack . show
         throw = liftIO . throwIO . userError . T.unpack
         t = entityDef $ Just val
-        vals = redactValues t (mkInsertValues val)
+        vals = mkInsertValues val
+        valsRedacted = redactValues t vals
 
     insertMany [] = return []
     insertMany vals = do
