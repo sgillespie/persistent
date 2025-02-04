@@ -5,6 +5,7 @@ module DefaultColumnTest (specsWith) where
 
 import Database.Persist.TH
 import Init
+import Data.List (singleton)
 
 share [mkPersist sqlSettings, mkMigrate "migrate1"] [persistLowerCase|
 DefaultTest sql=def_test
@@ -30,74 +31,47 @@ specsWith runDB = do
             defaultTestFieldTwo @?= Just 1
             defaultTestFieldThree @?= False
 
-    describe "insert" $ do
-      it "respects default" $ do
-        runDB $ do
-          rawExecute "DROP TABLE IF EXISTS def_test;" []
-          runMigration migrate1
+    describe "insert" $ testInsert runDB insert
+    describe "insert_" $ testInsert runDB insert_
+    describe "insertMany" $ testInsert runDB (insertMany . singleton)
+    describe "insertMany" $ testInsert runDB (insertMany_ . singleton)
 
-          void $
-            insert DefaultTest
-              { defaultTestFieldOne = 1
-              , defaultTestFieldTwo = Nothing
-              , defaultTestFieldThree = True
-              }
+testInsert
+  :: Runner SqlBackend m
+  => RunDb SqlBackend m
+  -> (DefaultTest -> SqlPersistT m a)
+  -> Spec
+testInsert runDB inserter = do
+  it "respects default" $ do
+    runDB $ do
+      rawExecute "DROP TABLE IF EXISTS def_test;" []
+      runMigration migrate1
 
-          Just (Entity _ DefaultTest{..}) <- selectFirst [] []
-          liftIO $ do
-            defaultTestFieldOne @?= 1
-            defaultTestFieldTwo @?= Just 1
-            defaultTestFieldThree @?= True
+      inserter DefaultTest
+        { defaultTestFieldOne = 1
+        , defaultTestFieldTwo = Nothing
+        , defaultTestFieldThree = True
+        }
 
-      it "overrides defaults" $ do
-        runDB $ do
-          rawExecute "DROP TABLE IF EXISTS def_test;" []
-          runMigration migrate1
+      Just (Entity _ DefaultTest{..}) <- selectFirst [] []
+      liftIO $ do
+        defaultTestFieldOne @?= 1
+        defaultTestFieldTwo @?= Just 1
+        defaultTestFieldThree @?= True
 
-          void $
-            insert_ DefaultTest
-              { defaultTestFieldOne = 1
-              , defaultTestFieldTwo = Just 2
-              , defaultTestFieldThree = True
-              }
+  it "overrides defaults" $ do
+    runDB $ do
+      rawExecute "DROP TABLE IF EXISTS def_test;" []
+      runMigration migrate1
 
-          Just (Entity _ DefaultTest{..}) <- selectFirst [] []
-          liftIO $ do
-            defaultTestFieldOne @?= 1
-            defaultTestFieldTwo @?= Just 2
-            defaultTestFieldThree @?= True
+      inserter DefaultTest
+        { defaultTestFieldOne = 1
+        , defaultTestFieldTwo = Just 2
+        , defaultTestFieldThree = True
+        }
 
-    describe "insert_" $ do
-      it "respects default" $ do
-        runDB $ do
-          rawExecute "DROP TABLE IF EXISTS def_test;" []
-          runMigration migrate1
-
-          insert_ DefaultTest
-            { defaultTestFieldOne = 1
-            , defaultTestFieldTwo = Nothing
-            , defaultTestFieldThree = True
-            }
-
-          Just (Entity _ DefaultTest{..}) <- selectFirst [] []
-          liftIO $ do
-            defaultTestFieldOne @?= 1
-            defaultTestFieldTwo @?= Just 1
-            defaultTestFieldThree @?= True
-
-      it "overrides defaults" $ do
-        runDB $ do
-          rawExecute "DROP TABLE IF EXISTS def_test;" []
-          runMigration migrate1
-
-          insert_ DefaultTest
-            { defaultTestFieldOne = 1
-            , defaultTestFieldTwo = Just 2
-            , defaultTestFieldThree = True
-            }
-
-          Just (Entity _ DefaultTest{..}) <- selectFirst [] []
-          liftIO $ do
-            defaultTestFieldOne @?= 1
-            defaultTestFieldTwo @?= Just 2
-            defaultTestFieldThree @?= True
+      Just (Entity _ DefaultTest{..}) <- selectFirst [] []
+      liftIO $ do
+        defaultTestFieldOne @?= 1
+        defaultTestFieldTwo @?= Just 2
+        defaultTestFieldThree @?= True

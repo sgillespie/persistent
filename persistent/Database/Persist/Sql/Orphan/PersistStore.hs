@@ -51,7 +51,7 @@ import Database.Persist.Sql.Util
        , mkInsertValues
        , mkUpdateText
        , parseEntityValues
-       , updatePersistValue, redactValues
+       , updatePersistValue, redactValues, redactPlaceholders, mkInsertPlaceholders
        )
 
 withRawQuery :: MonadIO m
@@ -242,11 +242,12 @@ instance PersistStoreWrite SqlBackend where
             Nothing -> mapM insert vals
             Just insertManyFn ->
                 case insertManyFn ent valss of
-                    ISRSingle sql -> rawSql sql (concat valss)
+                    ISRSingle sql -> rawSql sql (concat valssRedacted)
                     _ -> error "ISRSingle is expected from the connInsertManySql function"
                 where
                     ent = entityDef vals
                     valss = map mkInsertValues vals
+                    valssRedacted = map (redactValues ent) valss
 
     insertMany_ vals0 = runChunked (length $ getEntityFields t) insertMany_' vals0
       where
@@ -254,16 +255,20 @@ instance PersistStoreWrite SqlBackend where
         insertMany_' vals = do
           conn <- ask
           let valss = map mkInsertValues vals
+          let valssRedacted = map (redactValues t) valss
+          let cols = mkInsertPlaceholders t (escapeWith id)
+          let (fieldNames, placeholders) = unzip (redactPlaceholders t (head valss) cols)
           let sql = T.concat
                   [ "INSERT INTO "
                   , connEscapeTableName conn t
                   , "("
-                  , T.intercalate "," $ map (connEscapeFieldName conn . fieldDB) $ getEntityFields t
+                  , T.intercalate "," fieldNames
                   , ") VALUES ("
-                  , T.intercalate "),(" $ replicate (length valss) $ T.intercalate "," $ map (const "?") (getEntityFields t)
+                  , T.intercalate "),(" . replicate (length valss) . T.intercalate "," $
+                      placeholders
                   , ")"
                   ]
-          rawExecute sql (concat valss)
+          rawExecute sql (concat valssRedacted)
 
     replace k val = do
         conn <- ask

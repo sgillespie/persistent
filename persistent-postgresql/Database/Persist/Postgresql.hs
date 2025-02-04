@@ -541,7 +541,8 @@ insertManySql' :: EntityDef -> [[PersistValue]] -> InsertSqlResult
 insertManySql' ent valss =
     ISRSingle sql
   where
-    (fieldNames, placeholders)= unzip (Util.mkInsertPlaceholders ent escapeF)
+    cols = Util.mkInsertPlaceholders ent escapeF
+    (fieldNames, placeholders)= unzip (Util.redactPlaceholders ent (head valss) cols)
     sql = T.concat
         [ "INSERT INTO "
         , escapeE (getEntityDBName ent)
