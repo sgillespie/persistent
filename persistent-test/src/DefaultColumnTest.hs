@@ -31,17 +31,21 @@ specsWith runDB = do
             defaultTestFieldTwo @?= Just 1
             defaultTestFieldThree @?= False
 
-    describe "insert" $ testInsert runDB insert
-    describe "insert_" $ testInsert runDB insert_
-    describe "insertMany" $ testInsert runDB (insertMany . singleton)
-    describe "insertMany" $ testInsert runDB (insertMany_ . singleton)
+    describe "insert" $ testInsertOne runDB insert
+    describe "insert_" $ testInsertOne runDB insert_
+    describe "insertMany" $ do
+      testInsertOne runDB (insertMany . singleton)
+      testInsertMany runDB insertMany
+    describe "insertMany_" $ do
+      testInsertOne runDB (insertMany_ . singleton)
+      testInsertMany runDB insertMany_
 
-testInsert
+testInsertOne
   :: Runner SqlBackend m
   => RunDb SqlBackend m
   -> (DefaultTest -> SqlPersistT m a)
   -> Spec
-testInsert runDB inserter = do
+testInsertOne runDB inserter = do
   it "respects default" $ do
     runDB $ do
       rawExecute "DROP TABLE IF EXISTS def_test;" []
@@ -75,3 +79,56 @@ testInsert runDB inserter = do
         defaultTestFieldOne @?= 1
         defaultTestFieldTwo @?= Just 2
         defaultTestFieldThree @?= True
+
+testInsertMany
+  :: Runner SqlBackend m
+  => RunDb SqlBackend m
+  -> ([DefaultTest] -> SqlPersistT m a)
+  -> Spec
+testInsertMany runDB inserter = do
+  let defaultTest =
+        DefaultTest
+          { defaultTestFieldOne = 1
+          , defaultTestFieldTwo = Nothing
+          , defaultTestFieldThree = True
+          }
+
+  it "respects defaults with many entities" $ do
+    runDB $ do
+      rawExecute "DROP TABLE IF EXISTS def_test;" []
+      runMigration migrate1
+
+      inserter
+        [ defaultTest
+        , defaultTest
+        ]
+
+      [Entity _ ent1, Entity _ ent2] <- selectList [] []
+      liftIO $ do
+        defaultTestFieldOne ent1 @?= 1
+        defaultTestFieldTwo ent1 @?= Just 1
+        defaultTestFieldThree ent1 @?= True
+
+        defaultTestFieldOne ent2 @?= 1
+        defaultTestFieldTwo ent2 @?= Just 1
+        defaultTestFieldThree ent2 @?= True
+
+  it "overrides defaults with many entities" $ do
+    runDB $ do
+      rawExecute "DROP TABLE IF EXISTS def_test;" []
+      runMigration migrate1
+
+      inserter
+        [ defaultTest
+        , defaultTest { defaultTestFieldTwo = Just 2 }
+        ]
+
+      [Entity _ ent1, Entity _ ent2] <- selectList [] []
+      liftIO $ do
+        defaultTestFieldOne ent1 @?= 1
+        defaultTestFieldTwo ent1 @?= Nothing
+        defaultTestFieldThree ent1 @?= True
+
+        defaultTestFieldOne ent2 @?= 1
+        defaultTestFieldTwo ent2 @?= Just 2
+        defaultTestFieldThree ent2 @?= True

@@ -541,19 +541,19 @@ insertManySql' :: EntityDef -> [[PersistValue]] -> InsertSqlResult
 insertManySql' ent valss =
     ISRSingle sql
   where
+    valssRedacted = Util.redactValuesMany ent valss
     cols = Util.mkInsertPlaceholders ent escapeF
-    (fieldNames, placeholders)= unzip (Util.redactPlaceholders ent (head valss) cols)
+    (fieldNames, placeholders) = unzip (Util.redactPlaceholdersMany ent valss cols)
     sql = T.concat
         [ "INSERT INTO "
         , escapeE (getEntityDBName ent)
         , "("
         , T.intercalate "," fieldNames
         , ") VALUES ("
-        , T.intercalate "),(" $ replicate (length valss) $ T.intercalate "," placeholders
+        , T.intercalate "),(" $ replicate (length valssRedacted) $ T.intercalate "," placeholders
         , ") RETURNING "
         , Util.commaSeparated $ NEL.toList $ Util.dbIdColumnsEsc escapeF ent
         ]
-
 
 execute' :: PG.Connection -> PG.Query -> [PersistValue] -> IO Int64
 execute' conn query vals = PG.execute conn query (map P vals)

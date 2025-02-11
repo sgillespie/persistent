@@ -28,9 +28,9 @@ import qualified Data.Conduit.List as CL
 import qualified Data.Foldable as Foldable
 import Data.Function (on)
 import Data.Int (Int64)
-import Data.List (find, nubBy)
+import Data.List (find, nubBy, transpose)
 import qualified Data.Map as Map
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, mapMaybe)
 import Data.Text (Text, unpack)
 import qualified Data.Text as T
 import Data.Void (Void)
@@ -51,7 +51,11 @@ import Database.Persist.Sql.Util
        , mkInsertValues
        , mkUpdateText
        , parseEntityValues
-       , updatePersistValue, redactValues, redactPlaceholders, mkInsertPlaceholders
+       , updatePersistValue
+       , redactValues
+       , mkInsertPlaceholders
+       , redactValuesMany
+       , redactPlaceholdersMany
        )
 
 withRawQuery :: MonadIO m
@@ -247,17 +251,19 @@ instance PersistStoreWrite SqlBackend where
                 where
                     ent = entityDef vals
                     valss = map mkInsertValues vals
-                    valssRedacted = map (redactValues ent) valss
+                    valssRedacted = redactValuesMany ent valss
 
     insertMany_ vals0 = runChunked (length $ getEntityFields t) insertMany_' vals0
       where
         t = entityDef vals0
         insertMany_' vals = do
           conn <- ask
+          let ent = entityDef vals
           let valss = map mkInsertValues vals
-          let valssRedacted = map (redactValues t) valss
           let cols = mkInsertPlaceholders t (escapeWith id)
-          let (fieldNames, placeholders) = unzip (redactPlaceholders t (head valss) cols)
+          let valssRedacted = redactValuesMany ent valss
+          let colsRedacted = redactPlaceholdersMany ent valss cols
+          let (fieldNames, placeholders) = unzip colsRedacted
           let sql = T.concat
                   [ "INSERT INTO "
                   , connEscapeTableName conn t

@@ -4,6 +4,7 @@ module Database.Persist.Sql.Util
     ( parseEntityValues
     , keyAndEntityColumnNames
     , entityColumnCount
+    , isDefaultAttr
     , isIdField
     , hasNaturalKey
     , hasCompositePrimaryKey
@@ -18,15 +19,19 @@ module Database.Persist.Sql.Util
     , parenWrapped
     , mkInsertValues
     , redactValues
+    , redactValuesMany
+    , redactCols
     , mkInsertPlaceholders
     , redactPlaceholders
+    , redactPlaceholdersMany
+    , redactGeneratedCols
     , parseExistsResult
     ) where
 
 import Data.ByteString.Char8 (readInteger)
 import Data.Int (Int64)
 import Data.List.NonEmpty (NonEmpty(..))
-import Data.List (find)
+import Data.List (find, transpose)
 import qualified Data.Maybe as Maybe
 import Data.Text (Text, pack)
 import qualified Data.Text as T
@@ -268,6 +273,27 @@ redactValues entity vals =
         redactGeneratedCols
         (getEntityFields entity)
 
+redactValuesMany :: EntityDef -> [[PersistValue]] -> [[PersistValue]]
+redactValuesMany entity vals =
+    let
+      -- Remove generated columns
+      fields = Maybe.mapMaybe redactGeneratedCols (getEntityFields entity)
+      -- Put vals in column-major order so we can look at each columns' values at once
+      valsTransposed = transpose vals
+      -- Remove any fields which don't have values for ANY record
+      filtered = redactColsMany fields valsTransposed
+      -- Put them back in row-major order
+      vals' = transpose filtered
+    in
+      vals'
+  where
+    redactColsMany :: [FieldDef] -> [[PersistValue]] -> [[PersistValue]]
+    redactColsMany fields values =
+      map snd . filter (not . uncurry canRedact) $ zip fields values
+    canRedact :: FieldDef -> [PersistValue] -> Bool
+    canRedact field = all (Maybe.isNothing . redactCols field)
+
+
 redactCols :: FieldDef -> PersistValue -> Maybe PersistValue
 redactCols field val = redactGeneratedCols field >> redactDefaultCols field val
 
@@ -317,6 +343,28 @@ redactPlaceholders entity vals cols =
         (getEntityFields entity)
 
     redactCols' field val col = redactCols field val $> col
+
+redactPlaceholdersMany :: EntityDef -> [[PersistValue]] -> [(Text, Text)] -> [(Text, Text)]
+redactPlaceholdersMany entity vals cols =
+    let
+      -- Remove generated columns
+      fields = Maybe.mapMaybe redactGeneratedCols (getEntityFields entity)
+      -- Put vals in column-major order so we can look at each columns' values at once
+      valsTransposed = transpose vals
+      -- Remove any fields which don't have values for ANY record
+      filtered = redactColsMany fields valsTransposed cols
+      -- Put them back in row-major order
+    in
+      filtered
+  where
+    redactColsMany :: [FieldDef] -> [[PersistValue]] -> [(Text, Text)] -> [(Text, Text)]
+    redactColsMany fields values columns =
+      map ( \(_, _, col) -> col) $
+        filter ( \(field, val, _) -> not (canRedact field val)) $
+          zip3 fields values columns
+
+    canRedact :: FieldDef -> [PersistValue] -> Bool
+    canRedact field = all (Maybe.isNothing . redactCols field)
 
 parseExistsResult :: Maybe [PersistValue] -> Text -> String -> Bool
 parseExistsResult mm sql errloc =
